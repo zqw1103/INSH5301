@@ -1,0 +1,415 @@
+---
+title: "A8-10.Zunqiu.Wang.v2"
+author: "Zunqiu Wang"
+date: "11/9/2021"
+output: pdf_document
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(stringr)
+library(psych)
+library(sjmisc)
+library(magrittr)
+library(grid)
+library(gridExtra)
+library(regclass)
+library(Metrics)
+library(nortest)
+library(stargazer)
+library(coefplot)
+library(MASS)
+library(caret)
+library(leaps)
+library(psych)
+```
+Q1 \
+I would like to check what influences housing value from geographical, economic, demographic etc \ points of view. I would propose: more income makes housing value increase. \
+
+Q2 \
+The dataset downloaded from Kaggle was about California Housing prices in a given district from 1990 \ census. It was modified version and was used in the second chapter of the book 'Hands-On Machine learning with Scikit-Learn and \ TensorFlow'. It is a great introductory example to practically implement machine learning, specifically \ linear regression. The size and complexity fit the need for this assignment. The data was not cleaned so I can do data preprocessing accordingly. \
+
+Q3 \
+Dependent variable: median_house_value
+What factors and how each factor impacts house value to different degrees are my interests. I think major \ factors are income, house age, and total bedrooms.
+
+Q4 \
+Independent var: \
+housing_median_age: the older the higher value
+
+total_rooms: not too sure, it depends and may varied. thought the more, the higher value
+
+total_bedrooms: more the higher value, may be related to total rooms. the higher ratio of bedroom to total \ rooms the higher value
+
+population: more, the lower value
+
+households: more, the higher value. could be related to income variable, more households may have higher income
+
+median_income: the higher, the higher value
+
+ocean_proximity: depends on each factor, varied
+
+```{r}
+housing.df <- read.csv("housing.csv", stringsAsFactors = F)
+# View(housing.df)
+```
+
+```{r}
+summary(housing.df)
+str(housing.df)
+describe(housing.df)
+```
+# The unit for each variable
+
+housingMedianAge: Median age of a house within a block; a lower number is a newer building \
+
+totalRooms: Total number of rooms within a block \
+
+totalBedrooms: Total number of bedrooms within a block \
+
+population: Total number of people residing within a block \
+
+households: Total number of households, a group of people residing within a home unit, for a block \
+
+medianIncome: Median income for households within a block of houses (measured in tens of thousands of \ US Dollars)
+
+medianHouseValue: Median house value for households within a block (measured in US Dollars) \
+
+oceanProximity: Location of the house w.r.t ocean/sea \
+
+Cite: "https://www.kaggle.com/camnugent/california-housing-prices" \
+
+Q5
+```{r}
+# convert to factor
+housing.df$ocean_proximity <- as.factor(housing.df$ocean_proximity)
+levels(housing.df$ocean_proximity)
+
+# NA?
+colSums(is.na(housing.df))
+
+# impute median if NA for numerical variable since it is robust to outliers 
+# and change distribution and subsequent analysis
+housing.df <- housing.df %>%
+  mutate(total_bedrooms = ifelse(is.na(total_bedrooms), median(total_bedrooms, na.rm = T), 
+                                                             total_bedrooms))
+
+# remove unnecessary columns
+housing.df <- housing.df[, -c(1,2)]
+
+# rename variable names
+names(housing.df)[c(1, 6, 7)] <- c("age", "income", "value")
+
+```
+
+
+```{r}
+#normality of median house value, not normal, but for this assignment i leave how it is
+qqnorm(housing.df$value)
+
+# shapiro.test(housing.df$value)
+
+# ad.test(housing.df$value)
+
+boxplot(housing.df$value)
+qplot(housing.df$value)
+plot(housing.df$value)
+
+# plots for age, almost normal with heavy outliers tailing
+boxplot(housing.df$age)
+hist(housing.df$age)
+qqnorm(housing.df$age)
+
+# plots for total rooms
+boxplot(housing.df$total_rooms)
+hist(housing.df$total_rooms)
+qqnorm(housing.df$total_rooms)
+
+# plots for total bedrooms
+boxplot(housing.df$total_bedrooms)
+hist(housing.df$total_bedrooms)
+qqnorm(housing.df$total_bedrooms)
+
+# plots for population
+boxplot(housing.df$population)
+hist(housing.df$population)
+qqnorm(housing.df$population)
+
+# plots for housholds
+boxplot(housing.df$households)
+hist(housing.df$households)
+qqnorm(housing.df$households)
+
+# plots for income
+boxplot(housing.df$income)
+hist(housing.df$income)
+qqnorm(housing.df$income)
+
+# pairing plot
+pairs(housing.df)
+```
+
+```{r}
+# create a duplicate for full model
+housing.raw <- housing.df 
+
+```
+
+```{r}
+# recode categorical variable
+levels(housing.df$ocean_proximity)
+housing.df$Hocean <- ifelse(housing.df$ocean_proximity == "<1H OCEAN", 1, 0)
+housing.df$inland <- ifelse(housing.df$ocean_proximity == "INLAND", 1, 0)
+housing.df$island <- ifelse(housing.df$ocean_proximity == "ISLAND", 1, 0)
+housing.df$nearbay <- ifelse(housing.df$ocean_proximity == "NEAR BAY", 1, 0)
+housing.df$nearocean <- ifelse(housing.df$ocean_proximity == "NEAR OCEAN", 1, 0)
+
+housing.df$ocean_proximity <- NULL
+
+# # impute outliers with median value, for this assignment i didnt implement
+# housing.df <- housing.df %>% mutate(median_house_value = ifelse(housing.df$median_house_value > 500000, median(median_house_value, na.rm = T), median_house_value))
+#  or using winsor() inside psych package () to replace top and bottom 5% with the next highest value
+# housing.df <- housing.df %>% mutate(median_house_value_winsor = winsor(median_house_value, trim = 0.05, na.rm = T))
+
+```
+
+```{r}
+corPlot(housing.df[, -c(8:13)])
+
+
+```
+
+Q6
+```{r}
+# against age, R^2 is small, does not explain too much about value
+lm1 <- lm(housing.df$value ~ housing.df$age)
+summary(lm1)
+
+# against total rooms, R^2 is small, does not explain too much about value
+lm2 <- lm(housing.df$value ~ housing.df$total_rooms)
+summary(lm2)
+
+# against total bedrooms, R^2 is super small, does not explain too much about value
+lm3 <- lm(housing.df$value ~ housing.df$total_bedrooms)
+summary(lm3)
+
+# against population, R^2 is super small, does not explain too much about value
+lm4 <- lm(housing.df$value ~ housing.df$population)
+summary(lm4)
+
+# against income, R^2 is good, explain about value to some extent
+lm5 <- lm(housing.df$value ~ housing.df$income)
+summary(lm5)
+
+# against island, R^2 is small, does not explain about value
+lm6 <- lm(housing.df$value ~ housing.df$island)
+summary(lm6)
+
+# against near ocean, R^2 is not too bad, explain about value
+lm7 <- lm(housing.df$value ~ housing.df$nearocean)
+summary(lm7)
+
+#  against households, R^2 is small, does not explain about value
+lm8 <- lm(housing.df$value ~ housing.df$households)
+summary(lm8)
+
+# against inland, R^2 is good, explain about value to some extent
+lm9 <- lm(housing.df$value ~ housing.df$inland)
+summary(lm9)
+
+# agaiinst near bay, R^2 is not too bad, explain about value
+lm10 <- lm(housing.df$value ~ housing.df$nearbay)
+summary(lm10)
+```
+I think all in terms of coefficients will change with additions of other variables.
+
+Q7
+```{r}
+# full model with recoded dummy vars
+lm.full <- lm(housing.df$value ~ ., data = housing.df)
+summary(lm.full)
+plot(lm.full)
+
+#another full model without recoded var
+lm.full.raw <- lm(housing.raw$value ~ ., data = housing.raw)
+summary(lm.full.raw)
+contrasts(housing.raw$ocean_proximity)
+
+# check multicolinearity
+VIF(lm.full.raw)
+## seems several high collinearity
+```
+
+```{r results = 'asis'}
+stargazer(lm.full, no.space=TRUE, single.row = TRUE, column.sep.width = "3pt", 
+          font.size = "small", dep.var.labels= "Median House Value", 
+          covariate.labels=c("age", "total rooms", "total bedrooms", 
+                             "population", "households", "income", "1Hocean", 
+                             "inland", "island", "nearbay", "nearocean"), 
+          omit.stat=c("LL","ser","f"), header=FALSE)
+
+
+```
+
+
+Q8 \
+age: coefficient increased \
+total rooms: surprisingly from positive to negative meaning more total rooms devalue house \
+total bedroom: big change in positivity meaning more bedrooms increase house value \
+population: more negative, more people less value of house \
+households: change significant positivity, more housholds size, higher house value \
+income: almost same, decrease a little bit \
+inland: less negativity \
+island: increases a bit \
+nearbay: become super negative from positive \
+Unfortunately, all variables are significant in this model and also in bivariate model so cant find \ such example for spurious or chained causal pathway. \
+
+Q9 \
+I didnt expect total rooms could be so heavily influenced by other variables that going from positive \ coefficient in bivariate to super negative in full model. Otherwise, how rest variables affect house value \
+is within my expectation. \
+
+Q10 \
+The R^2(0.6338) and adjusted R^2(0.6336) almost same suggests that the model is not overfiting and dependent \ variables can be explained by independent variables. The moderate high R^2 signifies that the moderate accuracy of model.
+
+Q11 \
+```{r}
+lm.no.total.rooms <- lm(value ~ age + total_bedrooms + 
+                          population + income + households + 
+                          Hocean + inland + island + nearbay + 
+                          nearocean, data = housing.df)
+summary(lm.no.total.rooms)
+
+lm.no.households <- lm(value ~ age + total_rooms + total_bedrooms + 
+                         population + income + Hocean + inland + island + 
+                         nearbay + nearocean, data = housing.df)
+summary(lm.no.households)
+
+lm.no.room.households <- lm(value ~ age + total_bedrooms + population + 
+                              income + Hocean + inland + island + nearbay + 
+                              nearocean, data = housing.df)
+summary(lm.no.room.households)
+
+# # using some packages
+# summary(stepAIC(lm.full, direction = "backward", 
+#                       trace = FALSE))
+# set.seed(123)
+# train.control <- trainControl(method = "cv", number =10)
+# step.model <- train(value ~ ., housing.df,
+#                    method = "leapBackward",
+#                    tuneGrid = data.frame(nvmax = 1:11),
+#                     trControl = train.control)
+# step.model$results
+# step.model$bestTune
+# head(summary(step.model$finalModel))
+# coef(step.model$finalModel, 10)
+```
+I use stepwise-backward elimination. Since all independent variable are significant, i choose to remove multicolinear terms one by one and both. \ But it didnt improve R^2. I will stick to full model since inclusion of near ocean variable dosent affect overall output.
+
+Q13 \
+a \
+```{r}
+xmat <- as.matrix(cbind(housing.df$age, housing.df$total_rooms, 
+                        housing.df$total_bedrooms, housing.df$population,
+                        housing.df$households, housing.df$income, 
+                        housing.df$Hocean, housing.df$inland, housing.df$island, 
+                        housing.df$nearbay))
+xmat <- cbind(1, xmat)
+
+solve( t(xmat) %*% xmat )   %*%   t(xmat) %*% housing.df$value
+```
+The coefficients all match output from full model except one factor level (near ocean) in ocean proximity variable, which cant be computed manually due to singularity.
+
+b \
+```{r}
+# income coefficient
+tstat.income <- summary(lm.full)$coefficients[7,1]/summary(lm.full)$coefficients[7,2]
+pt(tstat.income, lm.full$df.residual, lower.tail = F)
+# get 0 and it indicates significance
+```
+
+c \
+$$R^{2} = \frac{TSS - SSE}{TSS}$$
+$$TSS = \sum_{i} (y_{i} - \bar{y})^{2}$$
+$$SSE = \sum_{i} (y_{i} - \hat{y}_{i})^{2}$$
+```{r}
+# get R^2
+ypred <- predict(lm.full)
+y <- housing.df$value
+tss <- sum((y - mean(y))^2)
+sse <- sum((y-ypred)^2)
+r2 <- (tss-sse)/tss
+r2 ## match the results
+
+# get adjusted R^2
+n <- length(y)
+k <- ncol(xmat) - 1 
+dft <- n - 1
+dfe <- n - k - 1
+(tss/dft - sse/dfe) / (tss/dft) 
+```
+match the results, a bit smaller than R^2 implying that variables included in the model have explanatory \ power
+
+d \
+```{r}
+# get F stats
+f <- (r2/k) / ((1-r2)/(n-k-1))
+f
+pf(f, k, (n-k-1), lower.tail = F)
+# p = 0 indicates significant
+```
+
+Q14 \
+```{r}
+# add income quadratic term
+lm.full.quad <- lm(value ~ I(income^2) + ., data = housing.df)
+summary(lm.full.quad)
+
+# the effect of a 1-unit increase in income at its mean value
+mean.income <- mean(housing.df$income)
+y1 <- lm.full.quad$coefficients[8] * mean.income + lm.full.quad$coefficients[2] * mean.income^2
+y2 <- lm.full.quad$coefficients[8] * (mean.income + 1) + 
+  lm.full.quad$coefficients[2] * (mean.income + 1)^2
+y2 - y1
+
+ggplot(data=housing.df,aes(x=income,y=value)) + geom_point() + 
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+```
+
+From result ouput, the quadratic term is significant, and coefficient is negative compared to linear\ term of income indicating the devalue trend. By plugging in mean of income as x, with a +1 increase in income to get increased value of $42634.87.
+
+Q15 \
+```{r}
+lm.full.int <- lm(value ~ income*households + ., data = housing.df)
+summary(lm.full.int)
+mean.households <- mean(housing.df$households)
+beta1 <- lm.full.int$coefficients[2]
+beta2 <- lm.full.int$coefficients[3]
+beta13 <- lm.full.int$coefficients[13]
+y.int1 <- (beta1 + beta13 * mean.households) * mean.income
+y.int2 <- (beta1 + beta13 * mean.households) * (mean.income + 1)
+y.int2 - y.int1
+
+# same result
+(beta1 + beta13 * mean.households)
+```
+The output from results indicates interaction term is significant, with a increase of $42684.5 
+
+Q16 \
+```{r}
+complete <- lm(value ~ income*households + ., data = housing.df)
+reduced <- lm(value ~ age + total_rooms + total_bedrooms + 
+                population + households + Hocean + inland + island + 
+                nearbay + nearocean, data = housing.df)
+anova(complete, reduced)
+
+r2c <- summary(complete)$r.squared
+r2r <- summary(reduced)$r.squared
+fstat <- ((r2c - r2r) / 2) / ((1 - r2c) / (20640 - 11 - 1))
+fstat
+pf(fstat, 2, (20640 - 11 - 1), lower.tail = F)
+```
+p val indicates significance, thus it shows that income and income:households both belong to the regression. 
+
+
