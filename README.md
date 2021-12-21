@@ -1,7 +1,8 @@
 # INSH5301
 Here listed all assignments corresponding to each modules.
 
--  	Introduction to R
+-  	Introduction to R 
+
 a.      Variable types and basic math
 
 b.     Vectors, matrices and data frames; data import and export
